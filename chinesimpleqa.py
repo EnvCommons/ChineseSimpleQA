@@ -39,8 +39,8 @@ Then, on a new line, write EXACTLY one of:
 """
 
 # Data loading with path checking (production /orwd_data first, then local fallback)
-if Path("/orwd_data/chinesimpleqa").exists():
-    DATA_PATH = Path("/orwd_data/chinesimpleqa")
+if Path("/orwd_data/").exists():
+    DATA_PATH = Path("/orwd_data/")
 else:
     DATA_PATH = Path(__file__).parent
 
@@ -115,7 +115,7 @@ class ChineseSimpleQA(Environment):
 
     async def get_prompt(self) -> str:
         """Return the Chinese question prompt for the agent."""
-        return self.config.question
+        return [TextBlock(text=self.config.question)]
 
     async def _grade_answer(self, student_answer: str) -> dict[str, Any]:
         """
