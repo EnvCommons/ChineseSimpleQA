@@ -1,219 +1,80 @@
-# Chinese-SimpleQA Environment
+# ChineseSimpleQA
 
-A Chinese-language factuality evaluation benchmark for OpenReward, containing 3,000 short-form Chinese Q&A pairs with LLM-based grading.
+[![⭐ OpenReward Environment](https://img.shields.io/badge/%E2%AD%90%20OpenReward-Environment-f7e6cc)](https://openreward.ai/GeneralReasoning/ChineseSimpleQA) [![Hugging Face Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-orange)](https://huggingface.co/datasets/OpenStellarTeam/Chinese-SimpleQA)
 
-## Overview
+## Description
 
-Chinese-SimpleQA is an OpenReward environment that evaluates large language models' ability to answer short factual questions in Chinese. Based on OpenAI's SimpleQA methodology, it uses LLM-based grading to classify answers as:
+ChineseSimpleQA is an environment for evaluating the factual accuracy of language models on short-form Chinese questions. Based on OpenAI's SimpleQA methodology adapted for Chinese, it contains 3,000 factual questions spanning 6 major topics and 99 fine-grained subtopics. Answers are graded by an LLM (gpt-5-mini) that classifies responses as CORRECT, INCORRECT, or NOT_ATTEMPTED based on semantic equivalence to a reference answer.
 
-- **CORRECT**: Semantically equivalent to reference answer
-- **INCORRECT**: Wrong or contradictory information
-- **NOT_ATTEMPTED**: Model indicates uncertainty or doesn't answer
+## Capabilities
 
-## Dataset Details
+- Answering short-form factual questions in Chinese
+- Demonstrating knowledge across a broad range of Chinese-language topics including Chinese culture, humanities, natural science, engineering and technology, society, and life, art, and culture
+- Providing precise, semantically accurate responses
 
-- **Size**: 3,000 tasks
-- **Language**: Chinese (Simplified)
-- **Topics**: 6 major categories with 99 fine-grained subtopics
-  - 中华文化 (Chinese Culture)
-  - Humanities
-  - Engineering, Technology, and Applied Sciences
-  - Life, Art, and Culture
-  - Society
-  - Natural Science
-- **Source**: [OpenStellarTeam/Chinese-SimpleQA](https://huggingface.co/datasets/OpenStellarTeam/Chinese-SimpleQA)
-- **Paper**: [arXiv:2411.07140](https://arxiv.org/abs/2411.07140)
+## Compute Requirements
 
-## Installation
-
-### Local Development
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/EnvCommons/chinesimpleqa.git
-   cd chinesimpleqa
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Download dataset**:
-   ```python
-   from datasets import load_dataset
-   ds = load_dataset("OpenStellarTeam/Chinese-SimpleQA", split="train")
-   ds.to_pandas()[["id", "question", "answer"]].to_parquet("chinese_simpleqa.parquet")
-   ```
-
-4. **Start the server**:
-   ```bash
-   python server.py
-   ```
-
-### Docker
-
-```bash
-docker build -t chinesimpleqa .
-docker run -p 8080:8080 \
-  -v $(pwd):/orwd_data/chinesimpleqa \
-  chinesimpleqa
-```
-
-## Usage
-
-### Testing with OpenAI Models
-
-```bash
-export OPENAI_API_KEY=sk-...
-python test_agent_openai.py
-```
-
-### Testing with Anthropic Models
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...  # Still needed for grading
-python test_agent_anthropic.py
-```
-
-### Programmatic Usage
-
-```python
-from openreward import AsyncOpenReward
-
-or_client = AsyncOpenReward()
-environment = or_client.environments.get(name="EnvCommons/chinesimpleqa")
-
-# List tasks
-tasks = await environment.list_tasks(split="test")
-print(f"Found {len(tasks)} tasks")
-
-# Run a task
-async with environment.session(
-    task=tasks[0],
-    secrets={"openai_api_key": "sk-..."}
-) as session:
-    prompt = await session.get_prompt()
-    print(prompt)  # Chinese question
-
-    # Submit answer
-    result = await session.call_tool(
-        "submit_answer",
-        {"answer": "你的中文答案"}
-    )
-    print(f"Reward: {result.reward}")
-    print(f"Classification: {result.metadata['classification']}")
-```
-
-## Environment Structure
-
-- **Split**: `test` (single split with 3,000 tasks)
-- **Tools**:
-  - `submit_answer(answer: str)`: Submit Chinese answer for evaluation
-- **Grading**: LLM-based using `gpt-5-mini`
-- **Reward**: Binary (1.0 for correct, 0.0 for incorrect/not_attempted)
-
-## Example Task
-
-```json
-{
-  "id": "97e7f58a3b154facaa3a5c64d678c7bf",
-  "question": "伏兔穴所属的经脉是什么？",
-  "answer": "足阳明胃经"
-}
-```
-
-**Translation**:
-- Question: "What meridian does the Futu acupoint belong to?"
-- Answer: "Stomach Meridian of Foot-Yangming"
-
-## Grading Methodology
-
-Answers are evaluated by an LLM (gpt-5-mini) that:
-
-1. **Accepts semantic equivalence**: Synonyms and paraphrasing are accepted
-2. **Focuses on meaning**: Character-level differences are tolerated
-3. **Detects non-attempts**: Phrases like "我不知道" (I don't know) are classified separately
-4. **Returns structured output**: Classification + reasoning + reward
-
-### Grading Accuracy
-
-- Estimated grader accuracy: ~94.4% (based on SimpleQA framework)
-- Benchmark error rate: ~3% inherent error
-
-## Data Requirements
-
-See [DATA_UPLOAD.md](DATA_UPLOAD.md) for instructions on uploading the dataset to OpenReward cloud storage.
-
-**Required file**: `/orwd_data/chinesimpleqa/chinese_simpleqa.parquet`
-
-## Files
-
-- `chinesimpleqa.py`: Main environment class with grading logic
-- `server.py`: Minimal server wrapper (8 lines)
-- `test_agent_openai.py`: OpenAI test client
-- `test_agent_anthropic.py`: Anthropic test client
-- `requirements.txt`: Python dependencies
-- `Dockerfile`: Container definition
-- `DATA_UPLOAD.md`: Data upload instructions
-
-## Development
-
-### Running Tests
-
-```bash
-# Syntax check
-python -m py_compile *.py
-
-# Start server
-python server.py
-
-# Test with agent (in another terminal)
-export OPENAI_API_KEY=sk-...
-python test_agent_openai.py
-```
-
-### Docker Build
-
-```bash
-docker build -t chinesimpleqa:test .
-docker run -p 8080:8080 \
-  -v $(pwd):/orwd_data/chinesimpleqa \
-  chinesimpleqa:test
-```
-
-## Performance Characteristics
-
-- **Evaluation Cost**: ~$0.30 per full benchmark run (3,000 tasks × ~$0.0001/grading)
-- **Latency**: ~1-2 seconds per answer (LLM grading)
-- **Model Requirements**: Any model with Chinese language support
-
-## Attribution
-
-**Dataset**: OpenStellarTeam/Chinese-SimpleQA
-**Paper**: Chinese SimpleQA: A Chinese Factuality Evaluation Benchmark (arXiv:2411.07140)
-**Methodology**: Based on OpenAI's SimpleQA framework
-**Environment**: Built for OpenReward platform
+This is a single-turn environment with no sandbox compute requirements. The agent receives a question and submits an answer.
 
 ## License
 
-See dataset license on [HuggingFace](https://huggingface.co/datasets/OpenStellarTeam/Chinese-SimpleQA).
+[ORLv1](https://openreward.ai/orlv1.md).
 
-## Citation
+## Tasks
+
+There are 3,000 tasks in the `test` split. Each task presents a short factual question in Chinese and expects a Chinese-language answer. The questions cover 6 major topics with 99 fine-grained subtopics:
+
+- Chinese Culture
+- Humanities
+- Engineering, Technology, and Applied Sciences
+- Life, Art, and Culture
+- Society
+- Natural Science
+
+## Reward Structure
+
+This is a sparse, binary reward environment. The reward is determined by LLM-based grading (gpt-5-mini) that classifies the submitted answer into one of three categories:
+
+- **CORRECT** (reward = 1.0): The answer is semantically equivalent to the reference answer. Synonyms, paraphrasing, and different wordings that convey the same meaning are accepted.
+- **INCORRECT** (reward = 0.0): The answer contradicts the reference answer or provides wrong information.
+- **NOT_ATTEMPTED** (reward = 0.0): The answer indicates the agent does not know or is empty/evasive.
+
+The grader focuses on semantic meaning in Chinese rather than exact character matching.
+
+## Data
+
+The dataset consists of 3,000 Chinese factual question-answer pairs stored in `chinese_simpleqa.parquet`. The data is sourced from the [OpenStellarTeam/Chinese-SimpleQA](https://huggingface.co/datasets/OpenStellarTeam/Chinese-SimpleQA) HuggingFace dataset. Each record contains an `id`, `question`, and `answer` field.
+
+## Tools
+
+| Tool | Description |
+|------|-------------|
+| `submit_answer(answer: str)` | Submit a Chinese-language answer for evaluation. The answer is graded by gpt-5-mini against the reference answer and classified as CORRECT, INCORRECT, or NOT_ATTEMPTED. Returns the classification, grader reasoning, and a binary reward. This tool ends the episode. |
+
+## Time Horizon
+
+This is a single-turn environment. The agent receives one question and makes one tool call (`submit_answer`) to submit its response.
+
+## Environment Difficulty
+
+This environment tests factual knowledge across a wide range of Chinese-language topics. The questions are designed to be short-form and have a single unambiguous correct answer, but they require broad and deep knowledge of Chinese culture, history, science, and other domains.
+
+## Other Environment Requirements
+
+This environment requires an OpenAI API key for LLM-based answer grading.
+
+## Safety
+
+ChineseSimpleQA is a factual question-answering benchmark. The agent only interacts with the environment by submitting text answers to factual questions. There are no safety concerns associated with this environment, as the agent has no access to external systems, file systems, or the internet during evaluation.
+
+## Citations
 
 ```bibtex
-@misc{wu2024chinesesimpleqa,
-  title={Chinese SimpleQA: A Chinese Factuality Evaluation Benchmark},
-  author={Wu, Yixuan and others},
-  year={2024},
-  eprint={2411.07140},
-  archivePrefix={arXiv}
+@article{he2024chinesesimpleqa,
+  author    = {Yancheng He and Shilong Li and Jiaheng Liu and Yingshui Tan and Weixun Wang and Hui Huang and Xingyuan Bu and Hangyu Guo and Chengwei Hu and Boren Zheng and Zhuoran Lin and Xuepeng Liu and Dekai Sun and Shirong Lin and Zhicheng Zheng and Xiaoyong Zhu and Wenbo Su and Bo Zheng},
+  title     = {Chinese SimpleQA: A Chinese Factuality Evaluation for Large Language Models},
+  journal   = {arXiv preprint arXiv:2411.07140},
+  year      = {2024},
+  url       = {https://arxiv.org/abs/2411.07140}
 }
 ```
-
-## Contact
-
-For issues or questions:
-- GitHub: https://github.com/EnvCommons/chinesimpleqa
-- OpenReward: https://openreward.ai
