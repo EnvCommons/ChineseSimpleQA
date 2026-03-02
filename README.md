@@ -18,7 +18,7 @@ This is a single-turn environment with no sandbox compute requirements. The agen
 
 ## License
 
-[ORLv1](https://openreward.ai/orlv1.md).
+[MIT](https://opensource.org/licenses/MIT).
 
 ## Tasks
 
@@ -57,7 +57,19 @@ This is a single-turn environment. The agent receives one question and makes one
 
 ## Environment Difficulty
 
-This environment tests factual knowledge across a wide range of Chinese-language topics. The questions are designed to be short-form and have a single unambiguous correct answer, but they require broad and deep knowledge of Chinese culture, history, science, and other domains.
+The original paper evaluates models on Chinese SimpleQA (Correct %):
+
+| Model | Correct |
+|-------|---------|
+| o1-preview | 63.8% |
+| Doubao-pro-32k | 61.9% |
+| GPT-4o | 59.3% |
+| GLM-4-Plus | 58.7% |
+| Qwen2.5-72B | 48.4% |
+| Claude-3.5-Sonnet | 46.2% |
+| GPT-4 | 45.4% |
+| LLaMA3.1-70B | 38.3% |
+| GPT-4o-mini | 37.6% |
 
 ## Other Environment Requirements
 
