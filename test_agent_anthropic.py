@@ -1,117 +1,112 @@
+"""Agent loop for ChineseSimpleQA (Anthropic Messages API).
+
+ChineseSimpleQA uses a @terminal tool: the grading tool is hidden from the
+model, which answers the Chinese question and writes its response as an
+ordinary message. The harness sees a message with no tool calls and routes
+its text to session.call_terminal_tool(), which grades it against the
+reference answer with gpt-5-mini.
+
+Runs against the deployed environment by default; set LOCAL=1 to point at a
+local `python server.py` on port 8080.
+"""
+
 import asyncio
 import os
 
 from anthropic import AsyncAnthropic
 from openreward import AsyncOpenReward
 
-MODEL_NAME = os.environ.get("MODEL_NAME", "claude-sonnet-4-5-20250929")
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+
+def _text_of(message) -> str:
+    parts = []
+    for block in message.content:
+        if block.type == "text":
+            parts.append(block.text)
+    return "\n".join(parts).strip()
 
 
-async def main() -> None:
-    """Test the Chinese-SimpleQA environment with Anthropic models."""
+async def main():
     or_client = AsyncOpenReward()
-    ant_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    ant_client = AsyncAnthropic()
 
-    # Connect to local server
-    environment = or_client.environments.get(
-        name="local/ChineseSimpleQA", base_url="http://localhost:8080"
-    )
+    MODEL_NAME = os.environ.get("MODEL_NAME", "claude-sonnet-4-5-20250929")
+    ENV_NAME = "GeneralReasoning/ChineseSimpleQA"
+    SPLIT = os.environ.get("SPLIT", "test")
+    NUM_TASKS = int(os.environ.get("NUM_TASKS", "1"))
+    MAX_TURNS = int(os.environ.get("MAX_TURNS", "40"))
+    OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
-    # Get tasks and tools
-    tasks = await environment.list_tasks(split="test")
+    base_url = "http://localhost:8080" if os.environ.get("LOCAL") else None
+    environment = or_client.environments.get(name=ENV_NAME, base_url=base_url)
+    print(f"Environment: {ENV_NAME} ({base_url or 'deployed'})")
+
+    tasks = await environment.list_tasks(split=SPLIT)
     tools = await environment.list_tools(format="anthropic")
+    terminal_tool = await environment.terminal_tool()
 
-    print(f"Loaded {len(tasks)} tasks from Chinese-SimpleQA")
-    print(f"Testing with model: {MODEL_NAME}")
-    print("-" * 60)
+    print(f"Found {len(tasks)} tasks")
+    print(f"Tools visible to the model: {[t['name'] for t in tools]}")
+    print(f"Terminal tool (hidden): {terminal_tool}")
 
-    # Test first task
-    task = tasks[0]
-    print(f"\nTask ID: {task.task_spec['id']}")
-    print(f"Question: {task.task_spec['question']}")
-    print(f"Reference Answer: {task.task_spec['answer']}")
-    print("-" * 60)
+    for task in tasks[:NUM_TASKS]:
+        print(f"\n=== Task {task.task_spec['id']} ===")
 
-    finished = False
+        async with environment.session(
+            task=task,
+            secrets={"openai_api_key": OPENAI_API_KEY},
+        ) as session:
+            assistant_ends_rollout = await session.is_assistant_message_final()
+            session_tools = await session.list_tools()
+            print(f"is_assistant_message_final() -> {assistant_ends_rollout}")
+            print(f"session.list_tools() -> {[t.name for t in session_tools]}")
+            assert "submit_answer" not in [t.name for t in session_tools], \
+                "terminal tool leaked into the model's tool list"
 
-    async with environment.session(
-        task=task, secrets={"openai_api_key": OPENAI_API_KEY}
-    ) as session:
-        prompt = await session.get_prompt()
+            prompt = await session.get_prompt()
+            messages = [{"role": "user", "content": prompt[0].text}]
 
-        # Initialize conversation with user prompt
-        messages = [{"role": "user", "content": prompt}]
+            reward = None
+            turn = 0
 
-        turn = 0
-        while not finished:
-            turn += 1
-            print(f"\n[Turn {turn}] Calling model...")
+            while turn < MAX_TURNS:
+                turn += 1
+                print(f"\n--- Turn {turn} ---")
 
-            # Use Anthropic Messages API
-            message = await ant_client.messages.create(
-                model=MODEL_NAME, max_tokens=4096, tools=tools, messages=messages
-            )
+                kwargs = {"model": MODEL_NAME, "max_tokens": 4096, "messages": messages}
+                if tools:
+                    kwargs["tools"] = tools
+                message = await ant_client.messages.create(**kwargs)
+                messages.append({"role": "assistant", "content": message.content})
 
-            # Add assistant response to conversation
-            messages.append({"role": "assistant", "content": message.content})
+                tool_uses = [b for b in message.content if b.type == "tool_use"]
+                if tool_uses:
+                    tool_results = []
+                    for block in tool_uses:
+                        result = await session.call_tool(block.name, block.input)
+                        text = result.blocks[0].text if result.blocks else ""
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": text,
+                        })
+                        print(f"Tool: {block.name}({str(block.input)[:120]})")
+                    messages.append({"role": "user", "content": tool_results})
+                    continue
 
-            print(f"  Stop reason: {message.stop_reason}")
+                final_message = _text_of(message)
+                print(f"Final message: {final_message[:300]}")
 
-            # Process tool use if present
-            if message.stop_reason == "tool_use":
-                # Find tool use block
-                tool_use = next(
-                    block for block in message.content if block.type == "tool_use"
-                )
-
-                print(f"  Tool called: {tool_use.name}")
-                print(f"  Arguments: {tool_use.input}")
-
-                # Call environment tool
-                tool_result = await session.call_tool(tool_use.name, tool_use.input)
-
-                finished = tool_result.finished
-                reward = tool_result.reward
-
-                # Add tool result to conversation
-                tool_output = tool_result.blocks[0].text if tool_result.blocks else ""
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_use.id,
-                                "content": tool_output,
-                            }
-                        ],
-                    }
-                )
-
-                print(f"  Reward: {reward:.3f}")
-                print(f"  Finished: {finished}")
-
-                if tool_result.blocks:
-                    print(f"\n{tool_result.blocks[0].text}")
-
-                if finished:
+                if not assistant_ends_rollout:
+                    print("Environment is not terminal-tool style; stopping.")
                     break
 
-            elif message.stop_reason == "end_turn":
-                # Model finished without calling tool (shouldn't happen in this env)
-                print("\n⚠️  Model finished without calling tool")
+                out = await session.call_terminal_tool(final_message)
+                reward = out.reward
+                print(f"\ncall_terminal_tool -> reward={reward} finished={out.finished}")
+                print(out.blocks[0].text[:800])
                 break
 
-            # Safety check: prevent infinite loops
-            if turn > 10:
-                print("\n⚠️  Maximum turns reached")
-                break
-
-    print("\n" + "=" * 60)
-    print("Test completed successfully!")
-    print("=" * 60)
+            print(f"\n=== Task {task.task_spec['id']} reward={reward} turns={turn} ===")
 
 
 if __name__ == "__main__":

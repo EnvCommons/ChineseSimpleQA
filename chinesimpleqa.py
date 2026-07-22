@@ -7,7 +7,7 @@ import openai
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from openreward.environments import Environment, JSONObject, TextBlock, ToolOutput, tool
+from openreward.environments import Environment, JSONObject, TextBlock, ToolOutput, terminal, tool
 
 # Grader template for 3-way classification (Correct/Incorrect/Not Attempted)
 GRADER_TEMPLATE = """You are an expert evaluator for Chinese-language question answering tasks.
@@ -170,6 +170,7 @@ class ChineseSimpleQA(Environment):
                 "reward": 0.0,
             }
 
+    @terminal
     @tool
     async def submit_answer(self, params: SubmitAnswerInput) -> ToolOutput:
         """

@@ -47,13 +47,11 @@ The dataset consists of 3,000 Chinese factual question-answer pairs stored in `c
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `submit_answer(answer: str)` | Submit a Chinese-language answer for evaluation. The answer is graded by gpt-5-mini against the reference answer and classified as CORRECT, INCORRECT, or NOT_ATTEMPTED. Returns the classification, grader reasoning, and a binary reward. This tool ends the episode. |
+ChineseSimpleQA exposes no tools to the agent. The rollout ends as soon as the model emits a plain assistant message; that message is graded in Chinese by gpt-5-mini against the reference answer.
 
 ## Time Horizon
 
-This is a single-turn environment. The agent receives one question and makes one tool call (`submit_answer`) to submit its response.
+This is a single-turn environment. The agent receives one question and replies with its answer as an ordinary message.
 
 ## Environment Difficulty
 
